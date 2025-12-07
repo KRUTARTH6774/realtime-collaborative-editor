@@ -6,24 +6,47 @@ import {
   useSubscription,
 } from '@apollo/client/react';
 import RichTextEditor from "./RichTextEditor";
+import "./App.css";
 
-import './App.css'
+// ---------- GraphQL ----------
 
-const DOCUMENT_ID = "1"; // hardcode for now
 const GET_DOCUMENT = gql`
   query GetDocument($id: ID!) {
     getDocument(id: $id) {
       id
+      title
       content
     }
   }
 `;
 
-const UPDATE_DOCUMENT = gql`
-  mutation UpdateDocument($id: ID!, $content: String!) {
-    updateDocument(id: $id, content: $content)
+const LIST_DOCUMENTS = gql`
+  query ListDocuments($ownerId: ID!) {
+    listDocuments(ownerId: $ownerId) {
+      id
+      title
+      ownerId
+    }
   }
 `;
+
+const CREATE_DOCUMENT = gql`
+  mutation CreateDocument($title: String!, $ownerId: ID!) {
+    createDocument(title: $title, ownerId: $ownerId) {
+      id
+      title
+      content
+      ownerId
+    }
+  }
+`;
+
+const UPDATE_DOCUMENT = gql`
+  mutation UpdateDocument($id: ID!, $content: String!, $userId: ID!) {
+    updateDocument(id: $id, content: $content, userId: $userId)
+  }
+`;
+
 
 const DOCUMENT_UPDATED = gql`
   subscription DocumentUpdated($id: ID!) {
@@ -34,109 +57,489 @@ const DOCUMENT_UPDATED = gql`
   }
 `;
 
-function App() {
-  const [content, setContent] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+const UPDATE_PRESENCE = gql`
+  mutation UpdatePresence(
+    $docId: ID!
+    $userId: ID!
+    $name: String!
+    $color: String!
+    $isTyping: Boolean!
+    $cursorPos: Int
+  ) {
+    updatePresence(
+      docId: $docId
+      userId: $userId
+      name: $name
+      color: $color
+      isTyping: $isTyping
+      cursorPos: $cursorPos
+    )
+  }
+`;
 
+const PRESENCE_UPDATED = gql`
+  subscription PresenceUpdated($docId: ID!) {
+    presenceUpdated(docId: $docId) {
+      docId
+      users {
+        userId
+        name
+        color
+        isTyping
+        cursorPos
+      }
+    }
+  }
+`;
+
+const DOCUMENT_CREATED = gql`
+  subscription DocumentCreated {
+    documentCreated {
+      id
+      title
+      content
+      ownerId
+    }
+  }
+`;
+
+// ---------- Helpers / Types ----------
+
+function randomColor() {
+  const colors = ["#0ea5e9", "#22c55e", "#e11d48", "#a855f7", "#f97316"];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function loadOrCreate(key: string, create: () => string) {
+  if (typeof window === "undefined") return create();
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const value = create();
+  localStorage.setItem(key, value);
+  return value;
+}
+
+type DocSummary = { id: string; title: string };
+
+type PresenceUser = {
+  userId: string;
+  name: string;
+  color: string;
+  isTyping: boolean;
+  cursorPos?: number | null;
+};
+
+// ---------- App ----------
+
+function App() {
+  // document selection
+  const [currentDocId, setCurrentDocId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocSummary[]>([]);
+
+  // current doc content
+  const [content, setContent] = useState("");
+  const [docTitle, setDocTitle] = useState("");
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+
+  // presence
+  const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
+
+  // identity (stable per browser via localStorage)
+  const [userId] = useState(() =>
+    loadOrCreate("rt-user-id", () => crypto.randomUUID())
+  );
+  const [userName] = useState(() =>
+    loadOrCreate("rt-user-name", () => `User-${Math.floor(Math.random() * 1000)}`)
+  );
+  const [userColor] = useState(() =>
+    loadOrCreate("rt-user-color", () => randomColor())
+  );
+
+  // last content we sent (to ignore our own echo)
   const lastSentContentRef = useRef<string | null>(null);
 
-  // 1) Initial document query
-  const { data, loading, error } = useQuery(GET_DOCUMENT, {
-    variables: { id: DOCUMENT_ID },
+  // ----- Queries -----
+
+  const { data: listData, loading: listLoading, error: listError } = useQuery(LIST_DOCUMENTS, {
+    variables: { ownerId: userId },
   });
 
-  // 2) Update document mutation
+
+  const {
+    data: docData,
+    loading: docLoading,
+    error: docError,
+  } = useQuery(GET_DOCUMENT, {
+    variables: { id: currentDocId },
+    skip: !currentDocId,
+  });
+
+  // const { data: listData, loading: listLoading } = useQuery(LIST_DOCUMENTS, {
+  //   variables: { ownerId: userId },
+  // });
+
+
+  // ----- Mutations -----
+
+  const [createDocument] = useMutation(CREATE_DOCUMENT);
   const [updateDocument] = useMutation(UPDATE_DOCUMENT);
+  const [updatePresence] = useMutation(UPDATE_PRESENCE);
 
-  // 3) Listen for remote updates (from other clients)
-  const { data: subData } = useSubscription(DOCUMENT_UPDATED, {
-    variables: { id: DOCUMENT_ID },
+
+  // ----- Subscriptions -----
+
+  const { data: docSubData } = useSubscription(DOCUMENT_UPDATED, {
+    variables: { id: currentDocId },
+    skip: !currentDocId,
   });
-  // useEffect(() => {
-  //   if (subData) {
-  //     console.log("📡 Subscription event:", subData);
-  //   }
-  // }, [subData]);
-  // ✅ Only hydrate from initial query ONCE
+
+  const { data: presenceData } = useSubscription(PRESENCE_UPDATED, {
+    variables: { docId: currentDocId },
+    skip: !currentDocId,
+  });
+
+  const { data: createdDocData } = useSubscription(DOCUMENT_CREATED);
+
+  // ---------- Effects ----------
+
+  // Load document list & pick initial doc
   useEffect(() => {
-    if (!hasLoaded && data?.getDocument?.content != null) {
-      setContent(data.getDocument.content);
+    if (!listData?.listDocuments) return;
+    setDocuments(listData.listDocuments);
+
+    if (!currentDocId && listData.listDocuments.length > 0) {
+      setCurrentDocId(listData.listDocuments[0].id);
+    }
+  }, [listData]);
+
+  useEffect(() => {
+    const newDoc = createdDocData?.documentCreated;
+    if (!newDoc) return;
+
+    setDocuments((prev) => {
+      // avoid duplicates if this client just created it locally
+      if (prev.some((d) => d.id === newDoc.id)) return prev;
+      return [...prev, { id: newDoc.id, title: newDoc.title }];
+    });
+  }, [createdDocData]);
+
+  // When switching documents, reset content state
+  useEffect(() => {
+    setHasLoaded(false);
+    setContent("");
+    setDocTitle("");
+    setPresenceUsers([]);
+  }, [currentDocId]);
+
+  // Hydrate content/title when doc query returns
+  useEffect(() => {
+    if (!currentDocId) return;
+    if (!hasLoaded && docData?.getDocument) {
+      setContent(docData.getDocument.content || "");
+      setDocTitle(docData.getDocument.title || "");
       setHasLoaded(true);
     }
-  }, [data, hasLoaded]);
+  }, [docData, hasLoaded, currentDocId]);
 
-  // ✅ Apply subscription updates (from other clients / from backend)
+  // Presence subscription → update list of users
   useEffect(() => {
-    const newHtml = subData?.documentUpdated?.content;
+    if (!presenceData?.presenceUpdated) return;
+    setPresenceUsers(presenceData.presenceUpdated.users);
+  }, [presenceData]);
+
+  // Document subscription → apply remote changes
+  useEffect(() => {
+    const newHtml = docSubData?.documentUpdated?.content;
     if (!newHtml) return;
 
-    // Ignore echo from yourself
+    // Ignore our own echo
     if (newHtml === lastSentContentRef.current) return;
 
-    console.log("⬇️ Remote update applied");
     setContent(newHtml);
-  }, [subData]);
+  }, [docSubData]);
 
-  // ✅ Debounced mutation – no more overwriting
+  // Initial presence when joining a doc
+  useEffect(() => {
+    if (!currentDocId) return;
+
+    updatePresence({
+      variables: {
+        docId: currentDocId,
+        userId,
+        name: userName,
+        color: userColor,
+        isTyping: false,
+        cursorPos: null,
+      },
+    }).catch(console.error);
+  }, [currentDocId, updatePresence, userColor, userId, userName]);
+
+  // Debounced save to server + presence "not typing"
   useEffect(() => {
     if (!isTyping) return;
+    if (!currentDocId) return;
 
     const timeout = setTimeout(() => {
+      lastSentContentRef.current = content;
+
       updateDocument({
         variables: {
-          id: DOCUMENT_ID,
+          id: currentDocId,
           content,
+          userId,
         },
       }).catch((err) => console.error("Update error:", err));
 
       setIsTyping(false);
+
+      updatePresence({
+        variables: {
+          docId: currentDocId,
+          userId,
+          name: userName,
+          color: userColor,
+          isTyping: false,
+          cursorPos: null,
+        },
+      }).catch(console.error);
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [content, isTyping, updateDocument]);
+  }, [
+    content,
+    isTyping,
+    currentDocId,
+    updateDocument,
+    updatePresence,
+    userColor,
+    userId,
+    userName,
+  ]);
 
-  if (loading && !hasLoaded) {
-    return <div style={{ padding: 20 }}>Loading document...</div>;
+  // ---------- Handlers ----------
+
+  const handleEditorChange = (html: string, cursorPos: number | null) => {
+    setIsTyping(true);
+    setContent(html);
+
+    if (!currentDocId) return;
+
+    updatePresence({
+      variables: {
+        docId: currentDocId,
+        userId,
+        name: userName,
+        color: userColor,
+        isTyping: true,
+        cursorPos,
+      },
+    }).catch(console.error);
+  };
+
+  const handleCreateDocument = async () => {
+    const title = window.prompt("New document title:", "Untitled");
+    if (!title) return;
+
+    try {
+      const res = await createDocument({
+        variables: { title, ownerId: userId },
+      });
+      const newDoc = res.data?.createDocument;
+      if (newDoc) {
+        setDocuments((prev) => [...prev, { id: newDoc.id, title: newDoc.title }]);
+        setCurrentDocId(newDoc.id);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create document");
+    }
+  };
+
+  // ---------- Loading / error states ----------
+
+  if (listLoading && !currentDocId) {
+    return <div style={{ padding: 20 }}>Loading documents…</div>;
   }
 
-  if (error) {
+  if (listError) {
     return (
       <div style={{ padding: 20, color: "red" }}>
-        Error: {error.message}
+        Error loading documents: {listError.message}
       </div>
     );
   }
 
-  const handleEditorChange = (html: string) => {
-    setIsTyping(true);
-    setContent(html);
-  };
+  const effectiveDocLoading = docLoading && !hasLoaded;
+  const effectiveDocError = docError;
+
+  // ---------- Render ----------
 
   return (
     <div
       style={{
-        padding: "2rem",
+        display: "flex",
+        minHeight: "100vh",
         fontFamily:
           "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        maxWidth: "900px",
-        margin: "0 auto",
       }}
     >
-      <h1 style={{ marginBottom: "1rem" }}>Real-Time Collaborative Doc</h1>
-      <p style={{ marginBottom: "0.5rem", color: "#666" }}>
-        Document ID: <strong>{DOCUMENT_ID}</strong>
-      </p>
+      {/* Sidebar */}
+      <aside
+        style={{
+          width: 260,
+          borderRight: "1px solid #eee",
+          padding: "1rem",
+          boxSizing: "border-box",
+        }}
+      >
+        <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Documents</h2>
 
-      <RichTextEditor value={content} onChange={handleEditorChange} />
+        <button
+          style={{
+            width: "100%",
+            padding: "0.45rem 0.6rem",
+            marginBottom: "0.75rem",
+            borderRadius: 6,
+            border: "1px solid #ddd",
+            background: "#f9fafb",
+            cursor: "pointer",
+            fontSize: "0.9rem",
+          }}
+          onClick={handleCreateDocument}
+        >
+          + New Document
+        </button>
 
-      <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#888" }}>
-        {isTyping
-          ? "Syncing changes..."
-          : "All changes saved. Open this page in another browser window to test real-time rich-text updates."}
-      </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {documents.map((doc) => (
+            <button
+              key={doc.id}
+              style={{
+                textAlign: "left",
+                padding: "0.35rem 0.5rem",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                background:
+                  doc.id === currentDocId ? "#e5f2ff" : "transparent",
+              }}
+              onClick={() => setCurrentDocId(doc.id)}
+            >
+              {doc.title}
+            </button>
+          ))}
+          {documents.length === 0 && (
+            <div style={{ fontSize: "0.8rem", color: "#888" }}>
+              No documents yet. Create one above.
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main
+        style={{
+          flex: 1,
+          padding: "2rem",
+          boxSizing: "border-box",
+        }}
+      >
+        {effectiveDocLoading && (
+          <div style={{ padding: 20 }}>Loading document…</div>
+        )}
+
+        {effectiveDocError && (
+          <div style={{ padding: 20, color: "red" }}>
+            Error loading document: {effectiveDocError.message}
+          </div>
+        )}
+
+        {!currentDocId && !effectiveDocLoading && (
+          <div style={{ padding: 20 }}>Select or create a document.</div>
+        )}
+
+        {currentDocId && !effectiveDocLoading && (
+          <>
+            <h1
+              style={{
+                marginBottom: "0.25rem",
+                fontSize: "1.7rem",
+                fontWeight: 700,
+              }}
+            >
+              {docTitle || "Untitled Document"}
+            </h1>
+            <p style={{ marginBottom: "0.75rem", color: "#666" }}>
+              ID: <strong>{currentDocId}</strong> · You are{" "}
+              <span style={{ fontWeight: 600 }}>{userName}</span>
+            </p>
+
+            {/* Presence pills */}
+            <div
+              style={{
+                display: "flex",
+                gap: "0.5rem",
+                marginBottom: "0.75rem",
+                flexWrap: "wrap",
+              }}
+            >
+              {presenceUsers.map((u) => (
+                <div
+                  key={u.userId}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    padding: "0.25rem 0.5rem",
+                    borderRadius: "999px",
+                    background: `${u.color}20`,
+                    border: `1px solid ${u.color}60`,
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: u.color,
+                    }}
+                  />
+                  <span>{u.name}</span>
+                  {u.isTyping && (
+                    <span style={{ opacity: 0.7 }}>typing…</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Editor */}
+            <RichTextEditor
+              value={content}
+              onChange={handleEditorChange}
+              localUserColor={userColor}
+              localUserId={userId}
+              remoteUsers={presenceUsers.filter((u) => u.userId !== userId)}
+            />
+
+            <p
+              style={{
+                marginTop: "0.5rem",
+                fontSize: "0.85rem",
+                color: "#888",
+              }}
+            >
+              {isTyping
+                ? "Syncing changes…"
+                : "All changes saved. Open this page in another browser window to test real-time rich-text updates."}
+            </p>
+          </>
+        )}
+      </main>
     </div>
   );
 }
 
-export default App
+export default App;

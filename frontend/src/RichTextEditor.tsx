@@ -3,12 +3,23 @@ import React, { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
-type RichTextEditorProps = {
-    value: string;                    // HTML from server
-    onChange: (html: string) => void; // send updated HTML to parent
+type RemoteUser = {
+    userId: string;
+    name: string;
+    color: string;
+    cursorPos?: number | null;
 };
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
+type RichTextEditorProps = {
+    value: string;
+    onChange: (html: string, cursorPos: number | null) => void;
+    localUserId: string;
+    localUserColor: string;
+    remoteUsers: RemoteUser[];
+};
+
+
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, localUserId, localUserColor, remoteUsers }) => {
     const isApplyingRemote = useRef(false);
 
     const editor = useEditor({
@@ -16,11 +27,19 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
         content: value,
         autofocus: true,
         onUpdate({ editor }) {
-            if (isApplyingRemote.current) return;   // ignore remote-triggered updates
+            if (isApplyingRemote.current) return;
             const html = editor.getHTML();
-            onChange(html);                         // local update only
+            const pos = editor.state.selection.from ?? null;
+            onChange(html, pos);
+        },
+        onSelectionUpdate({ editor }) {
+            if (isApplyingRemote.current) return;
+            const html = editor.getHTML();
+            const pos = editor.state.selection.from ?? null;
+            onChange(html, pos);
         },
     });
+
 
     // When 'value' from server changes (query/subscription), update editor content
     useEffect(() => {
@@ -72,6 +91,24 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
 
             <div className="editor-content">
                 <EditorContent editor={editor} />
+            </div>
+            <div style={{ marginTop: "0.25rem", fontSize: "0.75rem", opacity: 0.7 }}>
+                {remoteUsers.filter((u) => u.cursorPos != null)
+                    .map((u) => (
+                        <div key={u.userId}>
+                            <span
+                                style={{
+                                    display: "inline-block",
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    background: u.color,
+                                    marginRight: 4,
+                                }}
+                            />
+                            {u.name} cursor at position {u.cursorPos}
+                        </div>
+                    ))}
             </div>
         </div>
     );
