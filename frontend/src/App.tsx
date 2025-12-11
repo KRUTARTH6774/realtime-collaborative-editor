@@ -103,6 +103,12 @@ const DOCUMENT_CREATED = gql`
   }
 `;
 
+const DELETE_DOCUMENT = gql`
+  mutation DeleteDocument($id: ID!, $userId: ID!) {
+    deleteDocument(id: $id, userId: $userId)
+  }
+`;
+
 // ---------- Helpers / Types ----------
 
 function randomColor() {
@@ -185,6 +191,7 @@ function App() {
   const [createDocument] = useMutation(CREATE_DOCUMENT);
   const [updateDocument] = useMutation(UPDATE_DOCUMENT);
   const [updatePresence] = useMutation(UPDATE_PRESENCE);
+  const [deleteDocument] = useMutation(DELETE_DOCUMENT);
 
 
   // ----- Subscriptions -----
@@ -203,6 +210,23 @@ function App() {
 
   // ---------- Effects ----------
 
+  useEffect(() => {
+    // read ?doc=... from the URL
+    const params = new URLSearchParams(window.location.search);
+    const docFromUrl = params.get("doc");
+
+    if (docFromUrl) {
+      setCurrentDocId(docFromUrl);
+
+      // optionally add a stub into sidebar so it appears there
+      setDocuments((prev) => {
+        if (prev.some((d) => d.id === docFromUrl)) return prev;
+        return [...prev, { id: docFromUrl, title: "Shared document" }];
+      });
+    }
+  }, []);
+
+
   // Load document list & pick initial doc
   useEffect(() => {
     if (!listData?.listDocuments) return;
@@ -216,6 +240,7 @@ function App() {
   useEffect(() => {
     const newDoc = createdDocData?.documentCreated;
     if (!newDoc) return;
+    if (newDoc.ownerId === userId) return;
 
     setDocuments((prev) => {
       // avoid duplicates if this client just created it locally
@@ -356,6 +381,45 @@ function App() {
     }
   };
 
+  const handleDeleteDocument = async (id: string) => {
+    const ok = window.confirm("Delete this document permanently?");
+    if (!ok) return;
+
+    try {
+      const res = await deleteDocument({
+        variables: { id, userId },
+      });
+
+      const success = res.data?.deleteDocument;
+      if (!success) {
+        alert("You are not allowed to delete this document.");
+        return;
+      }
+
+      // Remove from local list and fix currentDocId if needed
+      setDocuments((prev) => {
+        const filtered = prev.filter((d) => d.id !== id);
+
+        if (currentDocId === id) {
+          const next = filtered[0]?.id ?? null;
+          setCurrentDocId(next);
+        }
+
+        return filtered;
+      });
+
+      // Clear editor if we just left the doc
+      if (currentDocId === id) {
+        setContent("");
+        setDocTitle("");
+        setPresenceUsers([]);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete document");
+    }
+  };
+
   // ---------- Loading / error states ----------
 
   if (listLoading && !currentDocId) {
@@ -413,22 +477,45 @@ function App() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {documents.map((doc) => (
-            <button
+            <div
               key={doc.id}
               style={{
-                textAlign: "left",
-                padding: "0.35rem 0.5rem",
-                borderRadius: 6,
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                background:
-                  doc.id === currentDocId ? "#e5f2ff" : "transparent",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
               }}
-              onClick={() => setCurrentDocId(doc.id)}
             >
-              {doc.title}
-            </button>
+              <button
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  padding: "0.35rem 0.5rem",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  background:
+                    doc.id === currentDocId ? "#e5f2ff" : "transparent",
+                }}
+                onClick={() => setCurrentDocId(doc.id)}
+              >
+                {doc.title}
+              </button>
+
+              <button
+                title="Delete document"
+                onClick={() => handleDeleteDocument(doc.id)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  padding: "0.2rem 0.3rem",
+                  color: "#888",
+                }}
+              >
+                🗑
+              </button>
+            </div>
           ))}
           {documents.length === 0 && (
             <div style={{ fontSize: "0.8rem", color: "#888" }}>
@@ -436,6 +523,7 @@ function App() {
             </div>
           )}
         </div>
+
       </aside>
 
       {/* Main content */}
@@ -460,6 +548,7 @@ function App() {
           <div style={{ padding: 20 }}>Select or create a document.</div>
         )}
 
+
         {currentDocId && !effectiveDocLoading && (
           <>
             <h1
@@ -474,6 +563,26 @@ function App() {
             <p style={{ marginBottom: "0.75rem", color: "#666" }}>
               ID: <strong>{currentDocId}</strong> · You are{" "}
               <span style={{ fontWeight: 600 }}>{userName}</span>
+              <button
+                style={{
+                  marginLeft: "0.75rem",
+                  padding: "0.25rem 0.5rem",
+                  borderRadius: 6,
+                  border: "1px solid #ddd",
+                  background: "#f9fafb",
+                  cursor: "pointer",
+                  fontSize: "0.8rem",
+                }}
+                onClick={() => {
+                  const url = `${window.location.origin}?doc=${currentDocId}`;
+                  navigator.clipboard
+                    .writeText(url)
+                    .then(() => alert("Share link copied to clipboard!"))
+                    .catch(() => alert("Failed to copy. You can copy the URL manually."));
+                }}
+              >
+                Share link
+              </button>
             </p>
 
             {/* Presence pills */}
@@ -537,6 +646,7 @@ function App() {
             </p>
           </>
         )}
+
       </main>
     </div>
   );

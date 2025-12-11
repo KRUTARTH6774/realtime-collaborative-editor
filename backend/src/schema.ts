@@ -27,6 +27,7 @@ const typeDefs = gql`
       isTyping: Boolean!
       cursorPos: Int
     ): Boolean
+    deleteDocument(id: ID!, userId: ID!): Boolean!
   }
 
   type Presence {
