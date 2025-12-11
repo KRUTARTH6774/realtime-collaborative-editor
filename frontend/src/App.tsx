@@ -167,19 +167,31 @@ function App() {
 
   // ----- Queries -----
 
-  const { data: listData, loading: listLoading, error: listError } = useQuery(LIST_DOCUMENTS, {
-    variables: { ownerId: userId },
-  });
+  const {
+    data: listData,
+    loading: listLoading,
+    error: listError,
+  } = useQuery<{ listDocuments: (DocSummary & { ownerId: string })[] }>(
+    LIST_DOCUMENTS,
+    {
+      variables: { ownerId: userId },
+    }
+  );
+
 
 
   const {
     data: docData,
     loading: docLoading,
     error: docError,
-  } = useQuery(GET_DOCUMENT, {
-    variables: { id: currentDocId },
-    skip: !currentDocId,
-  });
+  } = useQuery<{ getDocument: { id: string; title: string; content: string } | null }>(
+    GET_DOCUMENT,
+    {
+      variables: { id: currentDocId },
+      skip: !currentDocId,
+    }
+  );
+
 
   // const { data: listData, loading: listLoading } = useQuery(LIST_DOCUMENTS, {
   //   variables: { ownerId: userId },
@@ -188,25 +200,67 @@ function App() {
 
   // ----- Mutations -----
 
-  const [createDocument] = useMutation(CREATE_DOCUMENT);
-  const [updateDocument] = useMutation(UPDATE_DOCUMENT);
-  const [updatePresence] = useMutation(UPDATE_PRESENCE);
-  const [deleteDocument] = useMutation(DELETE_DOCUMENT);
+  const [createDocument] = useMutation<
+    {
+      createDocument: {
+        id: string;
+        title: string;
+        content: string;
+        ownerId: string;
+      };
+    },
+    { title: string; ownerId: string }
+  >(CREATE_DOCUMENT);
+
+  const [updateDocument] = useMutation<
+    { updateDocument: boolean },
+    { id: string; content: string; userId: string }
+  >(UPDATE_DOCUMENT);
+
+  const [updatePresence] = useMutation<
+    { updatePresence: boolean },
+    {
+      docId: string;
+      userId: string;
+      name: string;
+      color: string;
+      isTyping: boolean;
+      cursorPos?: number | null;
+    }
+  >(UPDATE_PRESENCE);
+
+  const [deleteDocument] = useMutation<
+    { deleteDocument: boolean },
+    { id: string; userId: string }
+  >(DELETE_DOCUMENT);
+
 
 
   // ----- Subscriptions -----
 
-  const { data: docSubData } = useSubscription(DOCUMENT_UPDATED, {
+  const { data: docSubData } = useSubscription<{
+    documentUpdated: { id: string; content: string };
+  }>(DOCUMENT_UPDATED, {
     variables: { id: currentDocId },
     skip: !currentDocId,
   });
 
-  const { data: presenceData } = useSubscription(PRESENCE_UPDATED, {
+  const { data: presenceData } = useSubscription<{
+    presenceUpdated: { docId: string; users: PresenceUser[] };
+  }>(PRESENCE_UPDATED, {
     variables: { docId: currentDocId },
     skip: !currentDocId,
   });
 
-  const { data: createdDocData } = useSubscription(DOCUMENT_CREATED);
+  const { data: createdDocData } = useSubscription<{
+    documentCreated: {
+      id: string;
+      title: string;
+      content: string;
+      ownerId: string;
+    };
+  }>(DOCUMENT_CREATED);
+
 
   // ---------- Effects ----------
 
@@ -628,8 +682,6 @@ function App() {
             <RichTextEditor
               value={content}
               onChange={handleEditorChange}
-              localUserColor={userColor}
-              localUserId={userId}
               remoteUsers={presenceUsers.filter((u) => u.userId !== userId)}
             />
 

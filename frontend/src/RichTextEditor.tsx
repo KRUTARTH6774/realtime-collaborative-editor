@@ -13,13 +13,12 @@ type RemoteUser = {
 type RichTextEditorProps = {
     value: string;
     onChange: (html: string, cursorPos: number | null) => void;
-    localUserId: string;
-    localUserColor: string;
-    remoteUsers: RemoteUser[];
+    remoteUsers: RemoteUser[]; // keep only what we actually use
 };
 
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, localUserId, localUserColor, remoteUsers }) => {
+
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, remoteUsers }) => {
     const isApplyingRemote = useRef(false);
 
     const editor = useEditor({
@@ -48,7 +47,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, localU
 
         if (value && value !== current) {
             isApplyingRemote.current = true;
-            editor.commands.setContent(value, false);
+            editor.commands.setContent(value);
             isApplyingRemote.current = false;
         }
     }, [value, editor]);
