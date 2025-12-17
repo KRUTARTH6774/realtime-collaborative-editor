@@ -14,7 +14,7 @@
   "type": "commonjs",
   "dependencies": {
     "@graphql-tools/schema": "^10.0.30",
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^6.19.1",
     "@types/node": "^24.10.1",
     "apollo-server-express": "^3.13.0",
     "cors": "^2.8.5",
@@ -25,7 +25,7 @@
     "graphql-ws": "^5.16.0",
     "ioredis": "^5.8.2",
     "pg": "^8.16.3",
-    "prisma": "^6.19.0",
+    "prisma": "^6.19.1",
     "redis": "^5.10.0",
     "typescript": "^5.9.3",
     "ws": "^8.18.3"
