@@ -40,6 +40,7 @@ async function startServer() {
     process.env.FRONTEND_ORIGIN || "http://localhost:5173";
 
   const allowedOrigins = FRONTEND_ORIGIN.split(",").map((s) => s.trim());
+
   // ⭐ attach CORS middleware *before* Apollo
   app.use(
     "/graphql",
@@ -82,6 +83,7 @@ async function startServer() {
 
   const PORT = Number(process.env.PORT) || 4000;
   httpServer.listen(PORT, () => {
+    console.log("ENV FRONTEND_ORIGIN:", process.env.FRONTEND_ORIGIN);
     console.log(`HTTP: http://localhost:${PORT}/graphql`);
     console.log(`WS: ws://localhost:${PORT}/graphql`);
     console.log("Allowed origins:", allowedOrigins);
