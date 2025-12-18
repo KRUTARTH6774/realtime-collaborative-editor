@@ -1,4 +1,3 @@
-// src/apolloClient.ts
 import {
   ApolloClient,
   InMemoryCache,
@@ -20,8 +19,6 @@ const wsLink = new GraphQLWsLink(
   })
 );
 
-
-// Route subscription operations to wsLink, others to httpLink
 const splitLink = ApolloLink.split(
   ({ query }) => {
     const def = getMainDefinition(query);

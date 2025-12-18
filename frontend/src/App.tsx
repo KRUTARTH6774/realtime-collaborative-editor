@@ -47,7 +47,6 @@ const UPDATE_DOCUMENT = gql`
   }
 `;
 
-
 const DOCUMENT_UPDATED = gql`
   subscription DocumentUpdated($id: ID!) {
     documentUpdated(id: $id) {
@@ -178,8 +177,6 @@ function App() {
     }
   );
 
-
-
   const {
     data: docData,
     loading: docLoading,
@@ -191,12 +188,6 @@ function App() {
       skip: !currentDocId,
     }
   );
-
-
-  // const { data: listData, loading: listLoading } = useQuery(LIST_DOCUMENTS, {
-  //   variables: { ownerId: userId },
-  // });
-
 
   // ----- Mutations -----
 
@@ -234,8 +225,6 @@ function App() {
     { id: string; userId: string }
   >(DELETE_DOCUMENT);
 
-
-
   // ----- Subscriptions -----
 
   const { data: docSubData } = useSubscription<{
@@ -261,25 +250,20 @@ function App() {
     };
   }>(DOCUMENT_CREATED);
 
-
   // ---------- Effects ----------
 
   useEffect(() => {
-    // read ?doc=... from the URL
     const params = new URLSearchParams(window.location.search);
     const docFromUrl = params.get("doc");
 
     if (docFromUrl) {
       setCurrentDocId(docFromUrl);
-
-      // optionally add a stub into sidebar so it appears there
       setDocuments((prev) => {
         if (prev.some((d) => d.id === docFromUrl)) return prev;
         return [...prev, { id: docFromUrl, title: "Shared document" }];
       });
     }
   }, []);
-
 
   // Load document list & pick initial doc
   useEffect(() => {
@@ -321,13 +305,13 @@ function App() {
     }
   }, [docData, hasLoaded, currentDocId]);
 
-  // Presence subscription → update list of users
+  // Presence subscription -> update list of users
   useEffect(() => {
     if (!presenceData?.presenceUpdated) return;
     setPresenceUsers(presenceData.presenceUpdated.users);
   }, [presenceData]);
 
-  // Document subscription → apply remote changes
+  // Document subscription -> apply remote changes
   useEffect(() => {
     const newHtml = docSubData?.documentUpdated?.content;
     if (!newHtml) return;
@@ -450,7 +434,6 @@ function App() {
         return;
       }
 
-      // Remove from local list and fix currentDocId if needed
       setDocuments((prev) => {
         const filtered = prev.filter((d) => d.id !== id);
 
@@ -490,8 +473,6 @@ function App() {
 
   const effectiveDocLoading = docLoading && !hasLoaded;
   const effectiveDocError = docError;
-
-  // ---------- Render ----------
 
   return (
     <div

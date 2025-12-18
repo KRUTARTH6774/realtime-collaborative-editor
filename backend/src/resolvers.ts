@@ -3,35 +3,12 @@ import { PubSub } from "graphql-subscriptions";
 
 const pubsub = new PubSub();
 
-
-// import { RedisPubSub } from "graphql-redis-subscriptions";
-// import { redisPublisher, redisSubscriber } from "./redis";
-
-// const pubsub = new RedisPubSub({
-//   publisher: redisPublisher,
-//   subscriber: redisSubscriber
-// });
-
 interface Doc {
   id: string;
   title: String;
   content: string;
   ownerId: string;
 }
-
-// In-memory docs
-// const documents: Record<string, Doc> = {
-//   "1": {
-//     id: "1",
-//     title: "Welcome Doc",
-//     content:
-//       "Hello from server 👋<br/><br/>This is your first collaborative document.",
-//   },
-// };
-
-// // simple incremental ID
-// let nextDocId = 2;
-
 
 type Presence = {
   userId: string;
@@ -43,7 +20,6 @@ type Presence = {
 
 const presenceByDoc: Record<string, Record<string, Presence>> = {};
 
-// ---- Resolvers ----
 export const resolvers = {
   Query: {
     getDocument: async (_: unknown, { id }: { id: string }) => {
@@ -67,10 +43,8 @@ export const resolvers = {
         content: string;
         userId: string;
       },
-      // context: { db: any; }
     ) => {
-      const { id, content, userId } = args; // extract mutation inputs
-      // console.log("[Mutation] updateDocument", id, "len:", content.length);
+      const { id, content, userId } = args;
 
       const existing = await prisma.document.findUnique({ where: { id } });
       if (!existing) {
@@ -97,10 +71,8 @@ export const resolvers = {
         id: string;
         userId: string;
       },
-      // context: { db: any; }
     ) => {
-      const { id, userId } = args; // extract mutation inputs
-      // console.log("[Mutation] updateDocument", id, "len:", content.length);
+      const { id, userId } = args; 
 
       const existing = await prisma.document.findUnique({ where: { id } });
       if (!existing) {

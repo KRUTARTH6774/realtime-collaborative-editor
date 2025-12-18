@@ -1,4 +1,3 @@
-// src/schema.ts
 import { gql } from "apollo-server-express";
 import { makeExecutableSchema } from "@graphql-tools/schema";
 import { resolvers } from "./resolvers";
@@ -49,8 +48,6 @@ const typeDefs = gql`
     documentCreated: Document      
   }  
 `;
-
-
 
 export const schema = makeExecutableSchema({
   typeDefs,

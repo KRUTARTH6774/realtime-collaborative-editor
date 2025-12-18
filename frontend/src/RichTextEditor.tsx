@@ -1,4 +1,3 @@
-// src/RichTextEditor.tsx
 import React, { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -13,10 +12,8 @@ type RemoteUser = {
 type RichTextEditorProps = {
     value: string;
     onChange: (html: string, cursorPos: number | null) => void;
-    remoteUsers: RemoteUser[]; // keep only what we actually use
+    remoteUsers: RemoteUser[];
 };
-
-
 
 const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, remoteUsers }) => {
     const isApplyingRemote = useRef(false);
@@ -56,7 +53,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, remote
 
     return (
         <div className="editor-wrapper">
-            {/* tiny toolbar: bold/italic + headings */}
             <div className="editor-toolbar">
                 <button
                     type="button"

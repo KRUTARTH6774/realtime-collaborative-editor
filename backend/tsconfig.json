@@ -1,21 +1,13 @@
 {
   "compilerOptions": {
-    // Where TS looks for source files
     "rootDir": "./src",
-    // Where compiled JS will go (if you run `tsc`)
     "outDir": "./dist",
-
-    // Use standard Node.js CommonJS modules
     "module": "commonjs",
     "target": "ES2020",
     "moduleResolution": "node",
-
-    // This is the key part: allow `import express from "express"`
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "verbatimModuleSyntax": false,
-
-    // Type checking
     "strict": true,
     "skipLibCheck": true
   },
